@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+
+import time
+import sys
+
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk
+
+from Xlib.display import Display
+from Xlib.protocol import event
+from Xlib import XK, X, ext
+
+log_file = None
+
+def log(*args):
+    # Enable for debugging
+    if False:
+        global log_file
+        if log_file is None:
+            log_file = open('/tmp/gtk-emoji-chooser.log', 'a')
+        print(*args, file=log_file)
+        log_file.flush()
+
+class EmojiPicker(object):
+    def __init__(self):
+        self.display = Display()
+        self.update_last_focus()
+
+        self.win = Window(cb=self.emoji_picked)
+
+    def update_last_focus(self):
+        self.focus = self.display.get_input_focus().focus
+        log(self.focus, self.focus.get_wm_name())
+
+    def focus_last(self):
+        self.display.set_input_focus(self.focus.id, X.RevertToParent, X.CurrentTime)
+
+    def key_press(self, k):
+        c = self.display.keysym_to_keycode(XK.string_to_keysym(k))
+        ext.xtest.fake_input(self.display, X.KeyPress, c)
+
+    def key_release(self, k):
+        c = self.display.keysym_to_keycode(XK.string_to_keysym(k))
+        ext.xtest.fake_input(self.display, X.KeyRelease, c)
+
+    def keys(self, ks):
+        for k in ks:
+            self.key_press(k)
+            self.key_release(k)
+
+    def emoji_picked(self, emoji):
+        log("emoji picked", emoji, hex(ord(emoji)))
+        h = hex(ord(emoji)).lstrip("0x")
+        hs = [str(hdigit) for hdigit in h]
+        self.focus_last()
+        self.key_press("Shift_L")
+        self.key_press("Control_L")
+        self.keys(["u"])
+        self.key_release("Shift_L")
+        self.key_release("Control_L")
+        time.sleep(0.1)
+        self.keys(hs + ["Return"])
+
+        time.sleep(0.1)
+
+        self.display.sync()
+        self.display.close()
+        Gtk.main_quit()
+
+    def main(self):
+        self.win.connect("destroy", Gtk.main_quit)
+        self.win.show_all()
+        self.win.open_picker()
+        Gtk.main()
+
+class Window(Gtk.Window):
+
+    def __init__(self, cb):
+        Gtk.Window.__init__(self, title="Standalone emoji picker")
+
+        self.set_default_size(500, 500)
+
+        self.textview = Gtk.TextView()
+        self.add(self.textview)
+
+        self.textbuffer = self.textview.get_buffer()
+        self.textbuffer.connect("changed", self.emoji_picked)
+        # TODO: one may close the picker with "Esc", and changed will not get
+        # called
+
+        self.callback = cb
+
+    def emoji_picked(self, buf):
+        start_iter = self.textbuffer.get_start_iter()
+        end_iter = self.textbuffer.get_end_iter()
+        text = self.textbuffer.get_text(start_iter, end_iter, True)
+        # TODO: check is one char, emoji
+        self.callback(text[0])
+
+    def open_picker(self):
+        self.textview.emit("insert-emoji")
+
+
+picker = EmojiPicker()
+picker.main()

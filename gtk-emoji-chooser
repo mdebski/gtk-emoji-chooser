@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
+
+from __future__ import print_function
 
 import time
 import sys
+
+import six
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -54,7 +58,10 @@ class EmojiPicker(object):
             self.key_release(k)
 
     def emoji_picked(self, emoji):
-        log("emoji picked", emoji, hex(ord(emoji)))
+        emoji_to_print = emoji
+        if six.PY2:
+            emoji_to_print = emoji.encode('utf-8')
+        log("emoji picked", emoji_to_print, hex(ord(emoji)))
         h = hex(ord(emoji)).lstrip("0x")
         hs = [str(hdigit) for hdigit in h]
         self.focus_last()
@@ -101,6 +108,8 @@ class Window(Gtk.Window):
         start_iter = self.textbuffer.get_start_iter()
         end_iter = self.textbuffer.get_end_iter()
         text = self.textbuffer.get_text(start_iter, end_iter, True)
+        if six.PY2:
+            text = text.decode('utf-8')
         # TODO: check is one char, emoji
         self.callback(text[0])
 
